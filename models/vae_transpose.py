@@ -41,19 +41,25 @@ class VAE_Transpose(nn.Module):
 
         # build encoder/decoder based on input parameters
         for i in range(n_pool):
-            # add necessary layers to encoder
-            enc_layers.append(torch.nn.Conv2d(cur_ch, next_ch, 3, padding=1))
-            enc_layers.append(torch.nn.ReLU())
-            enc_layers.append(torch.nn.Conv2d(next_ch, next_ch, 3, padding=1))
-            enc_layers.append(torch.nn.ReLU())
-            enc_layers.append(torch.nn.MaxPool2d(2, stride=2, return_indices=False))
-
-            # add necessary layers to decoder
-            dec_layers.insert(0, torch.nn.ConvTranspose2d(next_ch, cur_ch, 3, padding=1))
-            # dec_layers.insert(0, torch.nn.ConvTranspose2d(next_ch, next_ch, 3, padding=1))
-            # dec_layers.insert(0, torch.nn.ConvTranspose2d(next_ch, next_ch, 3, padding=1))
-            # dec_layers.insert(0, torch.nn.ConvTranspose2d(next_ch, next_ch, 3, padding=1))
-            dec_layers.insert(0, torch.nn.ConvTranspose2d(next_ch, next_ch, 4, 2, 1, bias=False))
+            enc_layers += [
+                torch.nn.Conv2d(cur_ch, next_ch, 3, padding=1),
+                torch.nn.ReLU(),
+                torch.nn.Conv2d(next_ch, next_ch, 3, padding=1),
+                torch.nn.ReLU(),
+                torch.nn.Conv2d(next_ch, next_ch, 3, padding=1),
+                torch.nn.ReLU(),
+                torch.nn.MaxPool2d(2, stride=2, return_indices=False),
+            ]
+            dec_layers = [
+                nn.ConvTranspose2d(next_ch, next_ch, 4, 2, 1, bias=False),
+                nn.ReLU(True),
+                torch.nn.ConvTranspose2d(next_ch, next_ch, 3, padding=1, bias=False),
+                nn.ReLU(True),
+                torch.nn.ConvTranspose2d(next_ch, next_ch, 3, padding=1, bias=False),
+                nn.ReLU(True),
+                torch.nn.ConvTranspose2d(next_ch, cur_ch, 3, padding=1, bias=False),
+                # nn.ReLU(True),
+            ] + dec_layers
 
             # update generator variables
             cur_ch = next_ch
@@ -61,13 +67,21 @@ class VAE_Transpose(nn.Module):
             cur_dim = cur_dim // 2
 
         enc_layers_fc = [
-            nn.Linear(cur_dim * cur_dim * cur_ch, 256),
-            nn.Linear(256, n_feat * 2)
+            nn.Linear(cur_dim * cur_dim * cur_ch, cur_dim * cur_ch),
+            nn.ReLU(True),
+            nn.Linear(cur_dim * cur_ch, cur_ch),
+            nn.ReLU(True),
+            nn.Linear(cur_ch, n_feat * 2),
+            nn.ReLU(True)
         ]
 
         dec_layers_fc = [
-            nn.Linear(n_feat, 256),
-            nn.Linear(256, cur_dim * cur_dim * cur_ch)
+            nn.Linear(n_feat, cur_ch),
+            nn.ReLU(True),
+            nn.Linear(cur_ch, cur_dim * cur_ch),
+            nn.ReLU(True),
+            nn.Linear(cur_dim * cur_ch, cur_dim * cur_dim * cur_ch),
+            nn.ReLU(True)
         ]
 
         # create encoder
