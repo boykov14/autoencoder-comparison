@@ -21,15 +21,15 @@ def train_vae_sbd():
     epochs = 100
     batch_size = 100
     img_size = [1,28,28]
-    train_new=False
+    train_new=True
     device='cpu'
     lr =0.0001
 
     model = VAE_Transpose(
         input_size=img_size,
-        n_feat=128,
+        n_feat=10,
         n_pool=2,
-        channels_start=12,
+        channels_start=32,
         exp_factor=2,
         weights="..//Weights//VAE_Transpose_test1.pt",
         train_new=train_new

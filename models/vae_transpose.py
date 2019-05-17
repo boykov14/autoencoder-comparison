@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class VAE_Transpose(nn.Module):
-    def __init__(self, input_size, n_feat, n_pool, channels_start, exp_factor=2, weights=None, train_new=True):
+    def __init__(self, input_size, n_feat, n_pool, channels_start, exp_factor=2, dropout = 0.2, weights=None, train_new=True):
         """
 
         :param input_size: shape of image in the form of a list of length 3 [h, w, ch] where h == w
@@ -44,19 +44,25 @@ class VAE_Transpose(nn.Module):
             enc_layers += [
                 torch.nn.Conv2d(cur_ch, next_ch, 3, padding=1),
                 torch.nn.ReLU(),
+                torch.nn.Dropout(dropout),
                 torch.nn.Conv2d(next_ch, next_ch, 3, padding=1),
                 torch.nn.ReLU(),
+                torch.nn.Dropout(dropout),
                 torch.nn.Conv2d(next_ch, next_ch, 3, padding=1),
                 torch.nn.ReLU(),
+                torch.nn.Dropout(dropout),
                 torch.nn.MaxPool2d(2, stride=2, return_indices=False),
             ]
             dec_layers = [
                 nn.ConvTranspose2d(next_ch, next_ch, 4, 2, 1, bias=False),
                 nn.ReLU(True),
+                             torch.nn.Dropout(dropout),
                 torch.nn.ConvTranspose2d(next_ch, next_ch, 3, padding=1, bias=False),
                 nn.ReLU(True),
+                             torch.nn.Dropout(dropout),
                 torch.nn.ConvTranspose2d(next_ch, next_ch, 3, padding=1, bias=False),
                 nn.ReLU(True),
+                torch.nn.Dropout(dropout),
                 torch.nn.ConvTranspose2d(next_ch, cur_ch, 3, padding=1, bias=False),
                 # nn.ReLU(True),
             ] + dec_layers
@@ -69,7 +75,11 @@ class VAE_Transpose(nn.Module):
         enc_layers_fc = [
             nn.Linear(cur_dim * cur_dim * cur_ch, cur_dim * cur_ch),
             nn.ReLU(True),
+            torch.nn.Dropout(dropout),
             nn.Linear(cur_dim * cur_ch, cur_ch),
+            nn.ReLU(True),
+            torch.nn.Dropout(dropout),
+            nn.Linear(cur_ch, cur_ch),
             nn.ReLU(True),
             nn.Linear(cur_ch, n_feat * 2),
             nn.ReLU(True)
@@ -78,10 +88,15 @@ class VAE_Transpose(nn.Module):
         dec_layers_fc = [
             nn.Linear(n_feat, cur_ch),
             nn.ReLU(True),
+            nn.Linear(cur_ch, cur_ch),
+            nn.ReLU(True),
+            torch.nn.Dropout(dropout),
             nn.Linear(cur_ch, cur_dim * cur_ch),
             nn.ReLU(True),
+            torch.nn.Dropout(dropout),
             nn.Linear(cur_dim * cur_ch, cur_dim * cur_dim * cur_ch),
-            nn.ReLU(True)
+            nn.ReLU(True),
+            torch.nn.Dropout(dropout)
         ]
 
         # create encoder
