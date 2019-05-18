@@ -16,22 +16,22 @@ import matplotlib.pyplot as plt
 
 def train_vae_sbd():
 
-    visualize = False
+    visualize = True
 
     epochs = 100
     batch_size = 100
     img_size = [1,28,28]
     train_new=True
-    device='cpu'
+    device='cuda'
     lr =0.0001
 
-    model = VAE_Transpose(
+    model = Autoencoder_Transpose(
         input_size=img_size,
-        n_feat=10,
-        n_pool=2,
+        n_feat=256,
+        n_pool=1,
         channels_start=32,
         exp_factor=2,
-        weights="..//Weights//VAE_Transpose_test1.pt",
+        weights="..//Weights//Autoencoder_Transpose_test1.pt",
         train_new=train_new
     )
 
@@ -43,12 +43,12 @@ def train_vae_sbd():
     # define transforms for train/test
     transforms_train = transforms.Compose([
            transforms.ToTensor(),
-           transforms.Normalize((0.1307,), (0.3081,))
+            transforms.Normalize([0.5], [0.5])
        ])
 
     transforms_test = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))
+            transforms.Normalize([0.5], [0.5])
         ])
 
     # create data loaders

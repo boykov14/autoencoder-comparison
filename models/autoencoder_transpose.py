@@ -16,77 +16,45 @@ class Autoencoder_Transpose(nn.Module):
 
         super(Autoencoder_Transpose, self).__init__()
 
-        # check input dims
-        try:
-            assert (len(input_size) == 3)
-            assert (input_size[1] == input_size[2])
-            assert (isinstance(n_pool, int))
-            assert (isinstance(channels_start, int))
-            assert (isinstance(exp_factor, (int, float)) and exp_factor > 0)
-        except AssertionError:
-            print("VAE parameter asserions not satisfied\n"
-                  "Make sure input size is a list specifying image shapes where 'image width' = 'image height'\n"
-                  "Make sure n_pool layers, and channels_start are integers\n"
-                  "Make sure exp_factor is a positive number")
+        encoder = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=4, stride=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=4, stride=1),
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=4, stride=2),
+            nn.ReLU(),
+        )
 
-        # set up parameters for generator script
-        cur_ch = input_size[0]
-        next_ch = channels_start
-        cur_dim = input_size[1]
+        cur_dim = 3
+        cur_ch = 256
 
-        # set up necessary accumulator lists
-        enc_layers = []
-        dec_layers = []
-
-        # build encoder/decoder based on input parameters
-        for i in range(n_pool):
-            # add necessary layers to encoder
-            enc_layers += [
-                torch.nn.Conv2d(cur_ch, next_ch, 3, padding=1),
-                torch.nn.ReLU(),
-                torch.nn.Conv2d(next_ch, next_ch, 3, padding=1),
-                torch.nn.ReLU(),
-                torch.nn.Conv2d(next_ch, next_ch, 3, padding=1),
-                torch.nn.ReLU(),
-                torch.nn.MaxPool2d(2, stride=2, return_indices=True),
-            ]
-            dec_layers = [
-                nn.ConvTranspose2d(next_ch, next_ch, 4, 2, 1, bias=False),
-                nn.ReLU(True),
-                torch.nn.ConvTranspose2d(next_ch, next_ch, 3, padding=1, bias=False),
-                nn.ReLU(True),
-                torch.nn.ConvTranspose2d(next_ch, next_ch, 3, padding=1, bias=False),
-                nn.ReLU(True),
-                torch.nn.ConvTranspose2d(next_ch, cur_ch, 3, padding=1, bias=False),
-                # nn.ReLU(True),
-            ] + dec_layers
-
-            # update generator variables
-            cur_ch = next_ch
-            next_ch = next_ch * exp_factor
-            cur_dim = cur_dim // 2
-
-        enc_layers_fc = [
-            nn.Linear(cur_dim * cur_dim * cur_ch, cur_dim * cur_ch),
-            nn.ReLU(True),
-            nn.Linear(cur_dim * cur_ch, cur_ch),
-            nn.ReLU(True),
-            nn.Linear(cur_ch, n_feat),
-            nn.ReLU(True)
-        ]
-
-        dec_layers_fc = [
+        enc_layers_fc = nn.Sequential(
+            nn.Linear(cur_ch * cur_dim * cur_dim, cur_ch * cur_dim),
+            nn.Linear(cur_ch * cur_dim, cur_ch),
+            nn.Linear(cur_ch, n_feat)
+        )
+        dec_layers_fc = nn.Sequential(
             nn.Linear(n_feat, cur_ch),
-            nn.ReLU(True),
-            nn.Linear(cur_ch, cur_dim * cur_ch),
-            nn.ReLU(True),
-            nn.Linear(cur_dim * cur_ch, cur_dim * cur_dim * cur_ch),
-            nn.ReLU(True)
-        ]
+            nn.Linear(cur_ch, cur_ch * cur_dim),
+            nn.Linear(cur_ch * cur_dim, cur_ch * cur_dim * cur_dim),
+        )
+
+        decoder = nn.Sequential(
+            nn.ConvTranspose2d(cur_ch, 128, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 1, kernel_size=5, stride=1),
+            # nn.Sigmoid(),
+        )
 
         # create encoder
-        self.encoder = Encoder(nn.ModuleList(enc_layers), nn.ModuleList(enc_layers_fc))
-        self.decoder = Decoder(nn.ModuleList(dec_layers), nn.ModuleList(dec_layers_fc), cur_dim, cur_ch)
+        self.encoder = Encoder(encoder, enc_layers_fc)
+        self.decoder = Decoder(decoder, dec_layers_fc, cur_dim, cur_ch)
 
         if weights is not None and not train_new:
             self.load_state_dict(torch.load(weights))
@@ -97,8 +65,8 @@ class Autoencoder_Transpose(nn.Module):
 
     def forward(self, x):
 
-        enc, indices = self.encoder(x, return_indices=True)
-        dec = self.decoder(enc, indices)
+        enc = self.encoder(x)
+        dec = self.decoder(enc)
         return enc, dec
 
     def train_batch(self, x):
@@ -124,28 +92,20 @@ class Encoder(nn.Module):
         self.layers = layers
         self.layers_fc = layers_fc
 
-    def forward(self, input, return_indices):
+    def forward(self, input):
 
         indices = []
 
         # get encoding
         enc = input
         for i, e_layer in enumerate(self.layers):
-            if type(e_layer) is torch.nn.MaxPool2d:
-                enc, ind = e_layer(enc)
-                if return_indices:
-                    indices.append(ind)
-            else:
-                enc = e_layer(enc)
+            enc = e_layer(enc)
 
         enc = enc.view(enc.size(0), -1)
         for i, e_layer_fc in enumerate(self.layers_fc):
             enc = e_layer_fc(enc)
 
-        if return_indices:
-            return enc, indices
-        else:
-            return enc
+        return enc
 
 
 class Decoder(nn.Module):
@@ -157,9 +117,8 @@ class Decoder(nn.Module):
         self.dim = dim
         self.ch = ch
 
-    def forward(self, input, indices):
+    def forward(self, input):
 
-        ind_idx = len(indices) - 1
         dec = input
 
         for i, d_layer_fc in enumerate(self.layers_fc):
@@ -168,10 +127,6 @@ class Decoder(nn.Module):
         dec = dec.view(dec.size(0), self.ch, self.dim, self.dim)
 
         for i, d_layer in enumerate(self.layers):
-            if type(d_layer) is torch.nn.MaxUnpool2d:
-                dec = d_layer(dec, indices[ind_idx])
-                ind_idx -= 1
-            else:
-                dec = d_layer(dec)
+            dec = d_layer(dec)
 
         return dec
